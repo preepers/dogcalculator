@@ -18,20 +18,6 @@ def calculate_weekly_adjustment(balance):
     else:
         return 0.0
 
-def get_fair_minimum(num_friends):
-    # Logical fair minimums based on number of friends
-    if num_friends == 1:
-        return 40
-    elif num_friends == 2:
-        return 32
-    elif num_friends == 3:
-        return 25
-    elif num_friends == 4:
-        return 20
-    else:
-        # For more than 4 friends, decrease a bit but never below 15
-        return max(15, 20 - (num_friends - 4) * 2)
-
 def monthly_payout(total_monthly_income, weekly_balances, num_friends):
     base_weekly_pay = 20
     weeks = len(weekly_balances)
@@ -53,36 +39,20 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
     average_friend_pay_raw = total_friend_raw_pay / num_friends
     boss_base_pay = average_friend_pay_raw * 1.5
 
-    # Fair minimum payout per friend * number of friends + boss pay
-    fair_min = get_fair_minimum(num_friends)
-    fair_total_friends = fair_min * num_friends
-    fair_total_needed = fair_total_friends + fair_min * 1.5  # boss gets 1.5x a friend approx
+    total_raw_payout = total_friend_raw_pay + boss_base_pay
 
-    # If income is really low, guarantee friends at least the fair_min each (even if it cuts boss pay)
-    if total_monthly_income < fair_total_needed:
-        # Scale friends to fair_min minimum total or as close as possible
-        scale_factor = total_monthly_income / (fair_total_friends + fair_min * 1.5)
-        scaled_friends = [round(fair_min * scale_factor, 2)] * num_friends
-        boss_pay = round(fair_min * 1.5 * scale_factor, 2)
-        total_payout = round(sum(scaled_friends) + boss_pay, 2)
-        return scaled_friends, boss_pay, total_payout
-
-    # Otherwise, normal scaling logic
-    if boss_base_pay > total_monthly_income:
-        # If boss pay alone is more than income, boss takes all, friends get zero
-        return [0.0] * num_friends, total_monthly_income, total_monthly_income
-
-    if total_friend_raw_pay + boss_base_pay > total_monthly_income:
-        available_for_friends = total_monthly_income - boss_base_pay
-        scale_factor = available_for_friends / total_friend_raw_pay
-        scaled_friends = [round(pay * scale_factor, 2) for pay in friend_totals]
-        boss_pay = round(boss_base_pay, 2)
-        total_payout = round(sum(scaled_friends) + boss_pay, 2)
-    else:
+    if total_raw_payout <= total_monthly_income:
+        # Enough money: pay friends full, boss gets leftover
         scaled_friends = [round(pay, 2) for pay in friend_totals]
-        leftover = total_monthly_income - (total_friend_raw_pay + boss_base_pay)
+        leftover = total_monthly_income - total_raw_payout
         boss_pay = round(boss_base_pay + leftover, 2)
         total_payout = total_monthly_income
+    else:
+        # Not enough money: scale everything proportionally (friends and boss)
+        scale_factor = total_monthly_income / total_raw_payout
+        scaled_friends = [round(pay * scale_factor, 2) for pay in friend_totals]
+        boss_pay = round(boss_base_pay * scale_factor, 2)
+        total_payout = round(sum(scaled_friends) + boss_pay, 2)
 
     return scaled_friends, boss_pay, total_payout
 
