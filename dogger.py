@@ -1,69 +1,80 @@
 import streamlit as st
 
-def calculate_adjusted_base_payouts(monthly_income, num_friends):
-    # Max 60% of total income goes to friends combined
-    max_friend_share = 0.6
-    total_friend_payout = min(monthly_income * max_friend_share, monthly_income - 1)
-    friend_payout = round(total_friend_payout / num_friends, 2)
-    total_friend_payout = round(friend_payout * num_friends, 2)
-    boss_payout = round(monthly_income - total_friend_payout, 2)
-    return [friend_payout] * num_friends, boss_payout
+st.set_page_config(page_title="Dog Walking Payout Calculator", layout="centered")
 
-def calculate_bonus(cycles_diff):
-    if cycles_diff == 0:
-        return 0
-    bonus = 0
-    for i in range(abs(cycles_diff)):
-        if cycles_diff > 0:
-            if i == 0:
-                bonus += 3.00
-            elif i == 1:
-                bonus += 2.00
+st.title("🐶 Dog Walking Payout Calculator")
+
+# Inputs
+num_friends = st.number_input("How many friends are working for you?", min_value=1, max_value=10, value=3, step=1)
+total_income = st.number_input("Monthly Business Income (€)", min_value=0.0, step=10.0)
+
+# Initialize input fields
+cycle_data = []
+st.subheader("Enter cycle differences for each week per friend")
+
+for friend in range(num_friends):
+    friend_weeks = []
+    st.markdown(f"**Friend {friend + 1}**")
+    cols = st.columns(4)
+    for week in range(4):
+        with cols[week % 4]:
+            val = st.number_input(f"Week {week + 1}", min_value=-5, max_value=5, step=1, key=f"f{friend}_w{week}")
+            friend_weeks.append(val)
+    cycle_data.append(friend_weeks)
+
+if st.button("Calculate Payout"):
+    # Weekly pay limit and base monthly pay
+    weekly_limit = 20
+    base_weekly_pay = weekly_limit
+    base_monthly_pay = base_weekly_pay * 4
+
+    # Bonus/Penalty rules
+    def calc_adjustment(week_delta):
+        if week_delta == 0:
+            return 0
+        elif week_delta > 0:
+            if week_delta == 1:
+                return 3.00
+            elif week_delta == 2:
+                return 5.00
             else:
-                bonus += 0.75
+                return 5.75
         else:
-            if i == 0:
-                bonus -= 2.50
-            elif i == 1:
-                bonus -= 3.00
+            if week_delta == -1:
+                return -2.50
+            elif week_delta == -2:
+                return -5.50
             else:
-                bonus -= 4.50
-    return bonus
+                return -10.00
 
-st.title("🐶 Dog Walking Business Monthly Payout Calculator")
+    payouts = []
+    total_friend_payout = 0
 
-monthly_income = st.number_input("Enter total monthly income (€):", min_value=0, value=300)
-num_friends = st.number_input("How many friends work with you?", min_value=1, value=3)
+    for friend_weeks in cycle_data:
+        adjustment = sum(calc_adjustment(week) for week in friend_weeks)
+        payout = base_monthly_pay + adjustment
+        payouts.append(round(payout, 2))
+        total_friend_payout += payout
 
-weekly_data = {}
-for i in range(num_friends):
-    st.markdown(f"### Friend {i+1}")
-    weekly_data[i] = []
-    for week in range(1, 5):
-        cycles = st.number_input(f"Week {week} cycle difference (e.g. 0, -1, +1):", key=f"friend_{i}_week_{week}", value=0)
-        weekly_data[i].append(cycles)
+    # Determine fair boss share
+    remaining = total_income - total_friend_payout
 
-# Get base pay
-base_payouts, boss_base = calculate_adjusted_base_payouts(monthly_income, num_friends)
+    if remaining <= 0:
+        # Cut everyone's payouts proportionally to ensure boss earns more than anyone else
+        scale_factor = total_income / (sum(payouts) + 1e-8)
+        payouts = [round(p * scale_factor, 2) for p in payouts]
+        max_friend = max(payouts)
+        boss_payout = max(round(max_friend + 1, 2), round(total_income - sum(payouts), 2))
+        if sum(payouts) + boss_payout > total_income:
+            scale_back = total_income / (sum(payouts) + boss_payout)
+            payouts = [round(p * scale_back, 2) for p in payouts]
+            boss_payout = round(boss_payout * scale_back, 2)
+    else:
+        boss_payout = round(remaining, 2)
 
-# Add bonuses/penalties
-final_payouts = []
-for i in range(num_friends):
-    adjustment = sum(calculate_bonus(diff) for diff in weekly_data[i])
-    final_payout = round(base_payouts[i] + adjustment, 2)
-    final_payouts.append(final_payout)
-
-# Recalculate boss cut after adjustments
-total_friends = sum(final_payouts)
-boss_payout = round(monthly_income - total_friends, 2)
-
-# --- Output ---
-st.markdown("## 💸 Monthly Payout")
-total_paid = 0
-for idx, payout in enumerate(final_payouts):
-    st.write(f"Friend {idx+1}: €{payout}")
-    total_paid += payout
-
-st.write(f"Boss (You): €{boss_payout}")
-st.write(f"Total payout: €{round(total_paid + boss_payout, 2)}")
-
+    # Output
+    st.subheader("--- Monthly Payout ---")
+    for i, payout in enumerate(payouts):
+        st.write(f"Friend {i+1}: €{payout}")
+    st.write(f"\n**Boss (You): €{boss_payout}**")
+    st.write(f"\n**Total payout: €{round(sum(payouts) + boss_payout, 2)}**")
