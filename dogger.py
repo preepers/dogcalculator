@@ -65,7 +65,7 @@ def main():
     weeks = 4
     weekly_balances = []
 
-    st.write("### Enter cycle balances per friend for each week")
+    st.write("### Enter cycle balances per person for each week")
     st.write("Use values between -3 (3 cycles less) and +3 (3 cycles extra). 0 means completed all cycles.")
 
     for w in range(weeks):
