@@ -1,69 +1,120 @@
 import streamlit as st
 
-# Adjustable values
-WEEKLY_LIMIT = 20
-CYCLE_DURATION_MINUTES = 40
-BASE_WEEKLY_PAY = WEEKLY_LIMIT
-
-# Penalty and bonus structure
-penalties = [-2.5, -5.5, -10]
-bonuses = [3.0, 5.0, 5.75]
-
-def calculate_adjustments(extra_cycles):
-    if extra_cycles == 0:
-        return 0
-    elif extra_cycles < 0:
-        count = min(abs(extra_cycles), len(penalties))
-        return -sum(penalties[i] for i in range(count))
+def calculate_weekly_adjustment(balance):
+    if balance < 0:
+        if balance == -1:
+            return -2.5
+        elif balance == -2:
+            return -5.5
+        else:
+            return -10
+    elif balance > 0:
+        if balance == 1:
+            return 3.0
+        elif balance == 2:
+            return 5.0
+        else:
+            return 5.75
     else:
-        count = min(extra_cycles, len(bonuses))
-        return sum(bonuses[i] for i in range(count))
+        return 0.0
 
-def distribute_fairly(total_income, num_friends, adjustments):
-    base_per_friend = BASE_WEEKLY_PAY * 4
-    base_payments = [base_per_friend + adjustments[i] for i in range(num_friends)]
+def get_fair_minimum(num_friends):
+    # Logical fair minimums based on number of friends
+    if num_friends == 1:
+        return 40
+    elif num_friends == 2:
+        return 32
+    elif num_friends == 3:
+        return 25
+    elif num_friends == 4:
+        return 20
+    else:
+        # For more than 4 friends, decrease a bit but never below 15
+        return max(15, 20 - (num_friends - 4) * 2)
 
-    fair_minimum = max(20 - (num_friends - 2) * 5, 10)
-    min_friend_earnings = min(fair_minimum, total_income / (num_friends + 1))
+def monthly_payout(total_monthly_income, weekly_balances, num_friends):
+    base_weekly_pay = 20
+    weeks = len(weekly_balances)
 
-    scaled = False
-    if any(f < min_friend_earnings for f in base_payments):
-        scaled = True
-        scale_factor = total_income / (sum(base_payments) + 1e-9)  # Avoid div by zero
-        base_payments = [round(p * scale_factor, 2) for p in base_payments]
+    friend_totals = [0.0] * num_friends
 
-    total_paid_to_friends = sum(base_payments)
-    boss_pay = round(total_income - total_paid_to_friends, 2)
+    for week in weekly_balances:
+        for i, balance in enumerate(week):
+            adjustment = calculate_weekly_adjustment(balance)
+            pay = base_weekly_pay + adjustment
+            friend_totals[i] += pay
 
-    return base_payments, boss_pay, scaled
+    total_friend_raw_pay = sum(friend_totals)
+    if num_friends == 0:
+        return [], total_monthly_income, total_monthly_income
+    if total_friend_raw_pay == 0:
+        return [0.0] * num_friends, total_monthly_income, total_monthly_income
 
-st.title("🐶 Dog Walking Payout Calculator")
+    average_friend_pay_raw = total_friend_raw_pay / num_friends
+    boss_base_pay = average_friend_pay_raw * 1.5
 
-num_friends = st.number_input("How many friends work with you?", min_value=1, max_value=10, value=3, step=1)
-total_income = st.number_input("Monthly income (€)", min_value=0.0, step=10.0)
+    # Fair minimum payout per friend * number of friends + boss pay
+    fair_min = get_fair_minimum(num_friends)
+    fair_total_friends = fair_min * num_friends
+    fair_total_needed = fair_total_friends + fair_min * 1.5  # boss gets 1.5x a friend approx
 
-adjustments = []
-st.header("Enter weekly cycle adjustments per friend (space-separated for 4 weeks, e.g. '0 -1 0 2')")
-for friend in range(num_friends):
-    input_str = st.text_input(f"Friend {friend + 1} weekly adjustments", value="0 0 0 0", key=f"f{friend}_weeks")
-    try:
-        weekly_vals = list(map(int, input_str.strip().split()))
-        if len(weekly_vals) != 4:
-            st.warning(f"Please enter exactly 4 integers for Friend {friend + 1}")
-            weekly_vals = [0, 0, 0, 0]
-    except:
-        st.warning(f"Invalid input for Friend {friend + 1}, using all zeros")
-        weekly_vals = [0, 0, 0, 0]
+    # If income is really low, guarantee friends at least the fair_min each (even if it cuts boss pay)
+    if total_monthly_income < fair_total_needed:
+        # Scale friends to fair_min minimum total or as close as possible
+        scale_factor = total_monthly_income / (fair_total_friends + fair_min * 1.5)
+        scaled_friends = [round(fair_min * scale_factor, 2)] * num_friends
+        boss_pay = round(fair_min * 1.5 * scale_factor, 2)
+        total_payout = round(sum(scaled_friends) + boss_pay, 2)
+        return scaled_friends, boss_pay, total_payout
 
-    total_adjustment = sum(calculate_adjustments(val) for val in weekly_vals)
-    adjustments.append(total_adjustment)
+    # Otherwise, normal scaling logic
+    if boss_base_pay > total_monthly_income:
+        # If boss pay alone is more than income, boss takes all, friends get zero
+        return [0.0] * num_friends, total_monthly_income, total_monthly_income
 
-if st.button("Calculate Payout"):
-    payouts, boss_pay, scaled = distribute_fairly(total_income, num_friends, adjustments)
-    st.subheader("--- Monthly Payout ---")
-    for i, amount in enumerate(payouts):
-        st.write(f"Friend {i + 1}: €{amount:.2f}")
-    st.write(f"Boss (You): €{boss_pay:.2f}")
-    st.write(f"Total payout: €{sum(payouts) + boss_pay:.2f}")
-    if scaled:
-        st.info("⚖️ Total income was too low to meet base expectations, so everyone's pay was scaled proportionally.")
+    if total_friend_raw_pay + boss_base_pay > total_monthly_income:
+        available_for_friends = total_monthly_income - boss_base_pay
+        scale_factor = available_for_friends / total_friend_raw_pay
+        scaled_friends = [round(pay * scale_factor, 2) for pay in friend_totals]
+        boss_pay = round(boss_base_pay, 2)
+        total_payout = round(sum(scaled_friends) + boss_pay, 2)
+    else:
+        scaled_friends = [round(pay, 2) for pay in friend_totals]
+        leftover = total_monthly_income - (total_friend_raw_pay + boss_base_pay)
+        boss_pay = round(boss_base_pay + leftover, 2)
+        total_payout = total_monthly_income
+
+    return scaled_friends, boss_pay, total_payout
+
+def main():
+    st.title("Dog Walking Monthly Payout Calculator")
+
+    num_friends = st.number_input("How many friends are working?", min_value=1, max_value=10, value=3)
+    total_monthly_income = st.number_input("Enter total monthly income (€):", min_value=0.0, format="%.2f")
+
+    weeks = 4
+    weekly_balances = []
+
+    st.write("### Enter cycle balances per friend for each week")
+    st.write("Use values between -3 (3 cycles less) and +3 (3 cycles extra). 0 means completed all cycles.")
+
+    for w in range(weeks):
+        st.write(f"**Week {w+1}**")
+        week_data = []
+        cols = st.columns(num_friends)
+        for i in range(num_friends):
+            val = cols[i].number_input(f"Friend {i+1}", min_value=-3, max_value=3, value=0, key=f"w{w}f{i}")
+            week_data.append(val)
+        weekly_balances.append(week_data)
+
+    if st.button("Calculate Payout"):
+        friends_pay, boss_pay, total_payout = monthly_payout(total_monthly_income, weekly_balances, num_friends)
+
+        st.write("### Monthly Payout")
+        for i, pay in enumerate(friends_pay, 1):
+            st.write(f"Friend {i}: €{pay}")
+        st.write(f"Boss (You): €{boss_pay}")
+        st.write(f"Total payout: €{total_payout}")
+
+if __name__ == "__main__":
+    main()
