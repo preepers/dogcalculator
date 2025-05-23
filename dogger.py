@@ -20,7 +20,6 @@ def calculate_adjustments(extra_cycles):
         return sum(bonuses[i] for i in range(count))
 
 def distribute_fairly(total_income, num_friends, adjustments):
-    base_total = BASE_WEEKLY_PAY * 4 * num_friends
     base_per_friend = BASE_WEEKLY_PAY * 4
     base_payments = [base_per_friend + adjustments[i] for i in range(num_friends)]
 
@@ -30,7 +29,7 @@ def distribute_fairly(total_income, num_friends, adjustments):
     scaled = False
     if any(f < min_friend_earnings for f in base_payments):
         scaled = True
-        scale_factor = (total_income / (sum(base_payments) + 1e-9))  # Avoid div by zero
+        scale_factor = total_income / (sum(base_payments) + 1e-9)  # Avoid div by zero
         base_payments = [round(p * scale_factor, 2) for p in base_payments]
 
     total_paid_to_friends = sum(base_payments)
@@ -44,13 +43,19 @@ num_friends = st.number_input("How many friends work with you?", min_value=1, ma
 total_income = st.number_input("Monthly income (€)", min_value=0.0, step=10.0)
 
 adjustments = []
-st.header("Enter weekly cycle adjustments per friend")
+st.header("Enter weekly cycle adjustments per friend (space-separated for 4 weeks, e.g. '0 -1 0 2')")
 for friend in range(num_friends):
-    st.subheader(f"Friend {friend + 1}")
-    total_adjustment = 0
-    for week in range(1, 5):
-        val = st.number_input(f"Week {week} (extra/less cycles)", min_value=-5, max_value=5, value=0, step=1, key=f"f{friend}_w{week}")
-        total_adjustment += calculate_adjustments(val)
+    input_str = st.text_input(f"Friend {friend + 1} weekly adjustments", value="0 0 0 0", key=f"f{friend}_weeks")
+    try:
+        weekly_vals = list(map(int, input_str.strip().split()))
+        if len(weekly_vals) != 4:
+            st.warning(f"Please enter exactly 4 integers for Friend {friend + 1}")
+            weekly_vals = [0, 0, 0, 0]
+    except:
+        st.warning(f"Invalid input for Friend {friend + 1}, using all zeros")
+        weekly_vals = [0, 0, 0, 0]
+
+    total_adjustment = sum(calculate_adjustments(val) for val in weekly_vals)
     adjustments.append(total_adjustment)
 
 if st.button("Calculate Payout"):
