@@ -59,7 +59,7 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
 def main():
     st.title("Dog Walking Monthly Payout Calculator")
 
-    num_friends = st.number_input("How many friends are working?", min_value=1, max_value=10, value=3)
+    num_friends = st.number_input("How many people are working?", min_value=1, max_value=10, value=3)
     total_monthly_income = st.number_input("Enter total monthly income (€):", min_value=0.0, format="%.2f")
 
     weeks = 4
