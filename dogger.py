@@ -32,50 +32,52 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
             pay = base_weekly_pay + adjustment
             friend_totals[i] += pay
 
-            actual_walks = 3 + balance  # Balance modifies expected 3 walks
-            friend_walks[i] += max(0, actual_walks)  # Cap minimum at 0
+            actual_walks = 3 + balance
+            friend_walks[i] += max(0, actual_walks)
 
-    total_friend_raw_pay = sum(friend_totals)
-    if num_friends == 0:
-        return [], total_monthly_income, total_monthly_income
-    if total_friend_raw_pay == 0:
+    # Calculate penalties and rewards with different curves
+    penalties = []
+    rewards = []
+    for i in range(num_friends):
+        missed = max(0, expected_walks - friend_walks[i])
+        extra = max(0, friend_walks[i] - expected_walks)
+
+        # Penalty: quadratic, stronger
+        penalty = (missed ** 2) * 0.35  # slightly increased factor for penalty
+        # Reward: quadratic but with smaller factor
+        reward = (extra ** 2) * 0.15  # increase reward factor to make bigger difference
+
+        penalties.append(penalty)
+        rewards.append(reward)
+
+    adjusted_friend_totals = []
+    for i in range(num_friends):
+        adjusted = friend_totals[i] - penalties[i] + rewards[i]
+        # prevent negative payouts
+        adjusted_friend_totals.append(max(0, adjusted))
+
+    total_friends_pay = sum(adjusted_friend_totals)
+
+    if num_friends == 0 or total_friends_pay == 0:
         return [0.0] * num_friends, total_monthly_income, total_monthly_income
 
-    average_friend_pay_raw = total_friend_raw_pay / num_friends
-    boss_base_pay = average_friend_pay_raw * 1.5
+    average_friend_pay = total_friends_pay / num_friends
+    boss_pay = average_friend_pay * 1.5
 
-    # Calculate penalties (more exponential)
-    penalties = []
-    total_penalties = 0
-    for i in range(num_friends):
-        missed_walks = max(0, expected_walks - friend_walks[i])
-        penalty = (missed_walks ** 2) * 0.25
-        penalties.append(penalty)
-        total_penalties += penalty
-
-    # Calculate rewards (even stronger non-linear)
-    rewards = []
-    total_rewards = 0
-    for i in range(num_friends):
-        extra_walks = max(0, friend_walks[i] - expected_walks)
-        reward = (extra_walks ** 1.8) * 1.5  # higher exponent and multiplier
-        rewards.append(reward)
-        total_rewards += reward
-
-    adjusted_friend_totals = [friend_totals[i] - penalties[i] + rewards[i] for i in range(num_friends)]
-
-    # Total raw payout includes boss pay but excludes net zero sum between penalties and rewards
-    total_raw_payout = sum(adjusted_friend_totals) + boss_base_pay + total_penalties - total_rewards
+    total_raw_payout = total_friends_pay + boss_pay
 
     if total_raw_payout <= total_monthly_income:
-        scaled_friends = [round(pay, 2) for pay in adjusted_friend_totals]
+        # pay full, leftover to boss
         leftover = total_monthly_income - total_raw_payout
-        boss_pay = round(boss_base_pay + total_penalties - total_rewards + leftover, 2)
+        boss_pay += leftover
+        boss_pay = round(boss_pay, 2)
+        scaled_friends = [round(pay, 2) for pay in adjusted_friend_totals]
         total_payout = total_monthly_income
     else:
+        # scale down proportionally
         scale_factor = total_monthly_income / total_raw_payout
         scaled_friends = [round(pay * scale_factor, 2) for pay in adjusted_friend_totals]
-        boss_pay = round((boss_base_pay + total_penalties - total_rewards) * scale_factor, 2)
+        boss_pay = round(boss_pay * scale_factor, 2)
         total_payout = round(sum(scaled_friends) + boss_pay, 2)
 
     return scaled_friends, boss_pay, total_payout
