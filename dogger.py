@@ -53,12 +53,12 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
         penalties.append(penalty)
         total_penalties += penalty
 
-    # Calculate rewards (stronger non-linear)
+    # Calculate rewards (even stronger non-linear)
     rewards = []
     total_rewards = 0
     for i in range(num_friends):
         extra_walks = max(0, friend_walks[i] - expected_walks)
-        reward = (extra_walks ** 1.6) * 1.0  # stronger non-linear reward
+        reward = (extra_walks ** 1.8) * 1.5  # higher exponent and multiplier
         rewards.append(reward)
         total_rewards += reward
 
