@@ -1,7 +1,5 @@
 import streamlit as st
 
-# Weekly adjustment stays the same
-
 def calculate_weekly_adjustment(balance):
     if balance < 0:
         if balance == -1:
@@ -44,9 +42,8 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
         return [0.0] * num_friends, total_monthly_income, total_monthly_income
 
     average_friend_pay_raw = total_friend_raw_pay / num_friends
-    boss_base_pay = average_friend_pay_raw * 1.5
 
-    # Calculate penalties
+    # Calculate penalties (strong quadratic)
     penalties = []
     total_penalties = 0
     for i in range(num_friends):
@@ -55,19 +52,35 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
         penalties.append(penalty)
         total_penalties += penalty
 
-    adjusted_friend_totals = [friend_totals[i] - penalties[i] for i in range(num_friends)]
+    # Calculate rewards (mild non-linear)
+    rewards = []
+    total_rewards = 0
+    for i in range(num_friends):
+        extra_walks = max(0, friend_walks[i] - expected_walks)
+        reward = (extra_walks ** 1.3) * 0.5
+        rewards.append(reward)
+        total_rewards += reward
 
-    total_raw_payout = sum(adjusted_friend_totals) + boss_base_pay + total_penalties
+    # Adjust friend totals by adding rewards and subtracting penalties
+    adjusted_friend_totals = [
+        friend_totals[i] + rewards[i] - penalties[i]
+        for i in range(num_friends)
+    ]
+
+    # Boss base pay includes average friend raw pay times 1.5 plus all penalties (not rewards)
+    boss_base_pay = average_friend_pay_raw * 1.5 + total_penalties
+
+    total_raw_payout = sum(adjusted_friend_totals) + boss_base_pay
 
     if total_raw_payout <= total_monthly_income:
         scaled_friends = [round(pay, 2) for pay in adjusted_friend_totals]
         leftover = total_monthly_income - total_raw_payout
-        boss_pay = round(boss_base_pay + total_penalties + leftover, 2)
+        boss_pay = round(boss_base_pay + leftover, 2)
         total_payout = total_monthly_income
     else:
         scale_factor = total_monthly_income / total_raw_payout
         scaled_friends = [round(pay * scale_factor, 2) for pay in adjusted_friend_totals]
-        boss_pay = round((boss_base_pay + total_penalties) * scale_factor, 2)
+        boss_pay = round(boss_base_pay * scale_factor, 2)
         total_payout = round(sum(scaled_friends) + boss_pay, 2)
 
     return scaled_friends, boss_pay, total_payout
