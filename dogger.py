@@ -1,19 +1,6 @@
 import streamlit as st
 
-# Mapping balances to walk count
-BALANCE_TO_WALKS = {
-    -3: 0,
-    -2: 1,
-    -1: 2,
-     0: 3,
-     1: 4,
-     2: 5,
-     3: 6
-}
-
-MINIMUM_WALK_PAYOUT = 6.50
-EXPECTED_WALKS = 12
-
+# Weekly adjustment stays the same
 
 def calculate_weekly_adjustment(balance):
     if balance < 0:
@@ -33,10 +20,10 @@ def calculate_weekly_adjustment(balance):
     else:
         return 0.0
 
-
 def monthly_payout(total_monthly_income, weekly_balances, num_friends):
     base_weekly_pay = 20
     weeks = len(weekly_balances)
+    expected_walks = weeks * 3  # 3 cycles per week
 
     friend_totals = [0.0] * num_friends
     friend_walks = [0] * num_friends
@@ -46,7 +33,9 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
             adjustment = calculate_weekly_adjustment(balance)
             pay = base_weekly_pay + adjustment
             friend_totals[i] += pay
-            friend_walks[i] += BALANCE_TO_WALKS.get(balance, 0)
+
+            actual_walks = 3 + balance  # Balance modifies expected 3 walks
+            friend_walks[i] += max(0, actual_walks)  # Cap minimum at 0
 
     total_friend_raw_pay = sum(friend_totals)
     if num_friends == 0:
@@ -57,35 +46,31 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
     average_friend_pay_raw = total_friend_raw_pay / num_friends
     boss_base_pay = average_friend_pay_raw * 1.5
 
-    if boss_base_pay > total_monthly_income:
-        return [0.0] * num_friends, total_monthly_income, total_monthly_income
+    # Calculate penalties
+    penalties = []
+    total_penalties = 0
+    for i in range(num_friends):
+        missed_walks = max(0, expected_walks - friend_walks[i])
+        penalty = (missed_walks ** 2) * 0.25
+        penalties.append(penalty)
+        total_penalties += penalty
 
-    if total_friend_raw_pay + boss_base_pay > total_monthly_income:
-        available_for_friends = total_monthly_income - boss_base_pay
-        scale_factor = available_for_friends / total_friend_raw_pay
-        scaled_friends = [pay * scale_factor for pay in friend_totals]
+    adjusted_friend_totals = [friend_totals[i] - penalties[i] for i in range(num_friends)]
+
+    total_raw_payout = sum(adjusted_friend_totals) + boss_base_pay + total_penalties
+
+    if total_raw_payout <= total_monthly_income:
+        scaled_friends = [round(pay, 2) for pay in adjusted_friend_totals]
+        leftover = total_monthly_income - total_raw_payout
+        boss_pay = round(boss_base_pay + total_penalties + leftover, 2)
+        total_payout = total_monthly_income
     else:
-        scaled_friends = friend_totals[:]
+        scale_factor = total_monthly_income / total_raw_payout
+        scaled_friends = [round(pay * scale_factor, 2) for pay in adjusted_friend_totals]
+        boss_pay = round((boss_base_pay + total_penalties) * scale_factor, 2)
+        total_payout = round(sum(scaled_friends) + boss_pay, 2)
 
-    # Apply hybrid fairness penalty
-    adjusted_friends = []
-    for pay, walks in zip(scaled_friends, friend_walks):
-        if walks >= 6:
-            adjusted = pay
-        elif walks >= 3:
-            adjusted = pay * ((walks / EXPECTED_WALKS) * 1.5)
-        elif walks > 0:
-            adjusted = max(pay * (walks / EXPECTED_WALKS), MINIMUM_WALK_PAYOUT)
-        else:
-            adjusted = 0.0
-        adjusted_friends.append(round(adjusted, 2))
-
-    total_adjusted_friends = sum(adjusted_friends)
-    boss_pay = round(total_monthly_income - total_adjusted_friends, 2)
-    total_payout = round(total_adjusted_friends + boss_pay, 2)
-
-    return adjusted_friends, boss_pay, total_payout
-
+    return scaled_friends, boss_pay, total_payout
 
 def main():
     st.title("Dog Walking Monthly Payout Calculator")
@@ -114,9 +99,8 @@ def main():
         st.write("### Monthly Payout")
         for i, pay in enumerate(friends_pay, 1):
             st.write(f"Friend {i}: €{pay}")
-        st.write(f"**Boss (You): €{boss_pay}**")
-        st.write(f"**Total payout: €{total_payout}**")
-
+        st.write(f"Boss (You): €{boss_pay}")
+        st.write(f"Total payout: €{total_payout}")
 
 if __name__ == "__main__":
     main()
