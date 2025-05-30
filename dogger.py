@@ -9,12 +9,13 @@ def calculate_weekly_adjustment(balance):
         else:
             return -10
     elif balance > 0:
+        # Reward curve for extra cycles (non-linear, moderate growth)
         if balance == 1:
-            return 3.0
+            return 4.0
         elif balance == 2:
-            return 5.0
+            return 7.0
         else:
-            return 5.75
+            return 9.0
     else:
         return 0.0
 
@@ -35,46 +36,42 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
             actual_walks = 3 + balance
             friend_walks[i] += max(0, actual_walks)
 
-    # Calculate penalties and rewards with different curves
     penalties = []
     rewards = []
     for i in range(num_friends):
         missed = max(0, expected_walks - friend_walks[i])
         extra = max(0, friend_walks[i] - expected_walks)
 
-        # Penalty: quadratic, stronger
-        penalty = (missed ** 2) * 0.35  # slightly increased factor for penalty
-        # Reward: quadratic but with smaller factor
-        reward = (extra ** 2) * 0.15  # increase reward factor to make bigger difference
+        penalty = (missed ** 2) * 0.35
+        reward = (extra ** 2) * 0.15
 
         penalties.append(penalty)
         rewards.append(reward)
 
     adjusted_friend_totals = []
+    excess_pay = 0.0
+
     for i in range(num_friends):
         adjusted = friend_totals[i] - penalties[i] + rewards[i]
-        # prevent negative payouts
+        if adjusted > 80:
+            excess = adjusted - 80
+            adjusted = 80
+            excess_pay += excess
         adjusted_friend_totals.append(max(0, adjusted))
 
-    total_friends_pay = sum(adjusted_friend_totals)
+    average_capped_pay = sum(adjusted_friend_totals) / num_friends if num_friends > 0 else 0
+    boss_base_pay = average_capped_pay * 1.5
+    boss_pay = boss_base_pay + excess_pay
 
-    if num_friends == 0 or total_friends_pay == 0:
-        return [0.0] * num_friends, total_monthly_income, total_monthly_income
-
-    average_friend_pay = total_friends_pay / num_friends
-    boss_pay = average_friend_pay * 1.5
-
-    total_raw_payout = total_friends_pay + boss_pay
+    total_raw_payout = sum(adjusted_friend_totals) + boss_pay
 
     if total_raw_payout <= total_monthly_income:
-        # pay full, leftover to boss
         leftover = total_monthly_income - total_raw_payout
         boss_pay += leftover
         boss_pay = round(boss_pay, 2)
         scaled_friends = [round(pay, 2) for pay in adjusted_friend_totals]
         total_payout = total_monthly_income
     else:
-        # scale down proportionally
         scale_factor = total_monthly_income / total_raw_payout
         scaled_friends = [round(pay * scale_factor, 2) for pay in adjusted_friend_totals]
         boss_pay = round(boss_pay * scale_factor, 2)
