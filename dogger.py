@@ -56,7 +56,7 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
         missed_walks = max(0, expected_walks - friend_walks[i])
         extra_walks = max(0, friend_walks[i] - expected_walks)
         penalty = (missed_walks ** 2) * 0.25
-        bonus = (extra_walks ** 1.5) * 0.5
+        bonus = (extra_walks ** 1.5) * 1.0  # Increased reward scaling
 
         penalties.append(penalty)
         bonuses.append(bonus)
