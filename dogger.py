@@ -1,7 +1,6 @@
 import streamlit as st
 from math import sqrt
 
-# Weekly adjustment stays the same
 def calculate_weekly_adjustment(balance):
     if balance < 0:
         if balance == -1:
@@ -16,7 +15,7 @@ def calculate_weekly_adjustment(balance):
         elif balance == 2:
             return 5.0
         else:
-            return 7.5  # Boosted to reflect extra work value
+            return 7.5
     else:
         return 0.0
 
@@ -24,7 +23,7 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
     base_weekly_pay = 20
     max_monthly_friend_pay = 80
     weeks = len(weekly_balances)
-    expected_walks = weeks * 3  # 3 cycles per week
+    expected_walks = weeks * 3
 
     friend_totals = [0.0] * num_friends
     friend_walks = [0] * num_friends
@@ -35,8 +34,8 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
             pay = base_weekly_pay + adjustment
             friend_totals[i] += pay
 
-            actual_walks = 3 + balance  # Balance modifies expected 3 walks
-            friend_walks[i] += max(0, actual_walks)  # Cap minimum at 0
+            actual_walks = 3 + balance
+            friend_walks[i] += max(0, actual_walks)
 
     total_friend_raw_pay = sum(friend_totals)
     if num_friends == 0:
@@ -47,7 +46,6 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
     average_friend_pay_raw = total_friend_raw_pay / num_friends
     boss_base_pay = average_friend_pay_raw * 1.5
 
-    # Calculate penalties and bonuses
     penalties = []
     bonuses = []
     total_penalties = 0
@@ -57,7 +55,7 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
         missed_walks = max(0, expected_walks - friend_walks[i])
         extra_walks = max(0, friend_walks[i] - expected_walks)
         penalty = (missed_walks ** 2) * 0.25
-        bonus = (extra_walks ** 1.5) * 1.2  # Increased reward scaling
+        bonus = (extra_walks ** 1.5) * 1.0
 
         penalties.append(penalty)
         bonuses.append(bonus)
@@ -66,14 +64,14 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
 
     adjusted_friend_totals = [min(friend_totals[i] - penalties[i] + bonuses[i], max_monthly_friend_pay) for i in range(num_friends)]
 
-    # Low income proportional scaling boost for light work
+    # Increased low income proportional scaling boost
     if total_monthly_income <= 100:
         max_walks = max(friend_walks)
         if max_walks > 0:
             for i in range(num_friends):
                 if friend_walks[i] > 0:
-                    scale_up = (friend_walks[i] / max_walks) ** 0.9  # Slightly stronger scaling
-                    boost_ratio = 0.25  # Higher boost ratio for low incomes
+                    scale_up = (friend_walks[i] / max_walks) ** 0.7  # stronger scaling
+                    boost_ratio = 0.25  # increased boost at low income
                     new_value = adjusted_friend_totals[i] + boost_ratio * (scale_up * total_monthly_income / num_friends)
                     boss_base_pay -= max(0, new_value - adjusted_friend_totals[i])
                     adjusted_friend_totals[i] = min(new_value, max_monthly_friend_pay)
