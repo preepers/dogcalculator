@@ -1,125 +1,91 @@
 import streamlit as st
-from math import sqrt
+import datetime
 
-def calculate_weekly_adjustment(balance):
-    if balance < 0:
-        if balance == -1:
-            return -2.5
-        elif balance == -2:
-            return -5.5
+def calculate_points(data):
+    walks = data.get('walks', 0)
+    weekend = data.get('weekend', 0)
+    rain = data.get('rain', 0)
+    sub = data.get('sub', 0)
+    extra = data.get('extra', 0)
+    missed = data.get('missed', 0)
+
+    base_points = walks * 10
+    bonus_points = weekend * 2 + rain * 3 + sub * 5 + extra * 6
+    penalty_points = missed * 7
+    total_points = base_points + bonus_points - penalty_points
+
+    return max(total_points, 0)  # Avoid negative points
+
+def calculate_payouts(walkers):
+    monthly_cap = 80
+    walker_points = {}
+    total_points = 0
+
+    for name, data in walkers.items():
+        points = calculate_points(data)
+        walker_points[name] = points
+        total_points += points
+
+    payouts = {}
+    for name, points in walker_points.items():
+        if total_points == 0:
+            payouts[name] = 0.0
         else:
-            return -10
-    elif balance > 0:
-        if balance == 1:
-            return 3.0
-        elif balance == 2:
-            return 5.0
-        else:
-            return 7.5
-    else:
-        return 0.0
+            raw_payout = (points / total_points) * len(walkers) * monthly_cap / 4  # Weekly pay
+            payouts[name] = round(min(raw_payout, monthly_cap / 4), 2)
 
-def monthly_payout(total_monthly_income, weekly_balances, num_friends):
-    base_weekly_pay = 20
-    max_monthly_friend_pay = 80
-    weeks = len(weekly_balances)
-    expected_walks = weeks * 3
+    return {
+        'walker_points': walker_points,
+        'walker_payouts': payouts
+    }
 
-    friend_totals = [0.0] * num_friends
-    friend_walks = [0] * num_friends
+# UI Setup
+st.set_page_config(page_title="Dog Walking Pay Calculator", layout="centered")
+st.title("🐶 Weekly Dog Walking Calculator")
+st.markdown("""
+Enter each walker's stats for the week. Max payout per person is **€80/month**, or **€20/week**.
+Points system:
+- Base walk: **10 pts**
+- Weekend walk: **+2 pts**
+- Rainy day: **+3 pts**
+- Substitution: **+5 pts**
+- Extra walk: **+6 pts**
+- Missed walk: **–7 pts**
+""")
 
-    for week in weekly_balances:
-        for i, balance in enumerate(week):
-            adjustment = calculate_weekly_adjustment(balance)
-            pay = base_weekly_pay + adjustment
-            friend_totals[i] += pay
+current_week = st.date_input("Week Ending", value=datetime.date.today())
+walker_names = ["Alice", "Ben", "Charlie"]
+walker_inputs = {}
 
-            actual_walks = 3 + balance
-            friend_walks[i] += max(0, actual_walks)
+with st.form("weekly_form"):
+    for name in walker_names:
+        with st.expander(f"🚶 {name}"):
+            walks = st.number_input(f"{name} - Total Walks", min_value=0, key=f"walks_{name}")
+            weekend = st.number_input(f"{name} - Weekend Walks", min_value=0, key=f"weekend_{name}")
+            rain = st.number_input(f"{name} - Rainy Walks", min_value=0, key=f"rain_{name}")
+            sub = st.number_input(f"{name} - Substitutions", min_value=0, key=f"sub_{name}")
+            extra = st.number_input(f"{name} - Extra Walks", min_value=0, key=f"extra_{name}")
+            missed = st.number_input(f"{name} - Missed Walks", min_value=0, key=f"missed_{name}")
+            walker_inputs[name] = {
+                'walks': walks,
+                'weekend': weekend,
+                'rain': rain,
+                'sub': sub,
+                'extra': extra,
+                'missed': missed
+            }
 
-    total_friend_raw_pay = sum(friend_totals)
-    if num_friends == 0:
-        return [], total_monthly_income, total_monthly_income
-    if total_friend_raw_pay == 0:
-        return [0.0] * num_friends, total_monthly_income, total_monthly_income
+    submitted = st.form_submit_button("📊 Calculate This Week's Pay")
 
-    average_friend_pay_raw = total_friend_raw_pay / num_friends
-    boss_base_pay = average_friend_pay_raw * 1.5
+if submitted:
+    results = calculate_payouts(walker_inputs)
+    st.success(f"Results for week ending {current_week.strftime('%B %d, %Y')}")
+    
+    st.subheader("🏆 Weekly Results")
+    for name in walker_names:
+        pts = results['walker_points'][name]
+        pay = results['walker_payouts'][name]
+        st.write(f"**{name}** — {pts} points → **€{pay}**")
 
-    penalties = []
-    bonuses = []
-    total_penalties = 0
-    total_bonuses = 0
-
-    for i in range(num_friends):
-        missed_walks = max(0, expected_walks - friend_walks[i])
-        extra_walks = max(0, friend_walks[i] - expected_walks)
-        penalty = (missed_walks ** 2) * 0.25
-        bonus = (extra_walks ** 1.5) * 1.0
-
-        penalties.append(penalty)
-        bonuses.append(bonus)
-        total_penalties += penalty
-        total_bonuses += bonus
-
-    adjusted_friend_totals = [min(friend_totals[i] - penalties[i] + bonuses[i], max_monthly_friend_pay) for i in range(num_friends)]
-
-    # More proportional low income boost
-    if total_monthly_income <= 100:
-        max_walks = max(friend_walks)
-        if max_walks > 0:
-            for i in range(num_friends):
-                if friend_walks[i] > 0:
-                    scale_up = (friend_walks[i] / max_walks) ** 0.5  # less flattening, more proportional
-                    boost_ratio = 0.4  # stronger boost at low income
-                    new_value = adjusted_friend_totals[i] + boost_ratio * (scale_up * total_monthly_income / num_friends)
-                    boss_base_pay -= max(0, new_value - adjusted_friend_totals[i])
-                    adjusted_friend_totals[i] = min(new_value, max_monthly_friend_pay)
-
-    total_raw_payout = sum(adjusted_friend_totals) + boss_base_pay + total_penalties - total_bonuses
-
-    if total_raw_payout <= total_monthly_income:
-        scaled_friends = [round(pay, 2) for pay in adjusted_friend_totals]
-        leftover = total_monthly_income - total_raw_payout
-        boss_pay = round(boss_base_pay + total_penalties - total_bonuses + leftover, 2)
-        total_payout = total_monthly_income
-    else:
-        scale_factor = total_monthly_income / total_raw_payout
-        scaled_friends = [round(pay * scale_factor, 2) for pay in adjusted_friend_totals]
-        boss_pay = round((boss_base_pay + total_penalties - total_bonuses) * scale_factor, 2)
-        total_payout = round(sum(scaled_friends) + boss_pay, 2)
-
-    return scaled_friends, boss_pay, total_payout
-
-def main():
-    st.title("Dog Walking Monthly Payout Calculator")
-
-    num_friends = st.number_input("How many friends are working?", min_value=1, max_value=10, value=3)
-    total_monthly_income = st.number_input("Enter total monthly income (€):", min_value=0.0, format="%.2f")
-
-    weeks = 4
-    weekly_balances = []
-
-    st.write("### Enter cycle balances per friend for each week")
-    st.write("Use values between -3 (3 cycles less) and +3 (3 cycles extra). 0 means completed all cycles.")
-
-    for w in range(weeks):
-        st.write(f"**Week {w+1}**")
-        week_data = []
-        cols = st.columns(num_friends)
-        for i in range(num_friends):
-            val = cols[i].number_input(f"Friend {i+1}", min_value=-3, max_value=3, value=0, key=f"w{w}f{i}")
-            week_data.append(val)
-        weekly_balances.append(week_data)
-
-    if st.button("Calculate Payout"):
-        friends_pay, boss_pay, total_payout = monthly_payout(total_monthly_income, weekly_balances, num_friends)
-
-        st.write("### Monthly Payout")
-        for i, pay in enumerate(friends_pay, 1):
-            st.write(f"Friend {i}: €{pay}")
-        st.write(f"Boss (You): €{boss_pay}")
-        st.write(f"Total payout: €{total_payout}")
-
-if __name__ == "__main__":
-    main()
+    st.markdown("---")
+    st.caption("Created with ❤️ to reward fair work")
