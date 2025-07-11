@@ -57,7 +57,7 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
         missed_walks = max(0, expected_walks - friend_walks[i])
         extra_walks = max(0, friend_walks[i] - expected_walks)
         penalty = (missed_walks ** 2) * 0.25
-        bonus = (extra_walks ** 1.5) * 1.0  # Increased reward scaling
+        bonus = (extra_walks ** 1.5) * 1.2  # Increased reward scaling
 
         penalties.append(penalty)
         bonuses.append(bonus)
@@ -72,8 +72,8 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
         if max_walks > 0:
             for i in range(num_friends):
                 if friend_walks[i] > 0:
-                    scale_up = (friend_walks[i] / max_walks) ** 0.8
-                    boost_ratio = 0.15  # Control how much boost happens at low income
+                    scale_up = (friend_walks[i] / max_walks) ** 0.9  # Slightly stronger scaling
+                    boost_ratio = 0.25  # Higher boost ratio for low incomes
                     new_value = adjusted_friend_totals[i] + boost_ratio * (scale_up * total_monthly_income / num_friends)
                     boss_base_pay -= max(0, new_value - adjusted_friend_totals[i])
                     adjusted_friend_totals[i] = min(new_value, max_monthly_friend_pay)
