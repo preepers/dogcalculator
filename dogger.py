@@ -1,7 +1,7 @@
 import streamlit as st
+from math import sqrt
 
 # Weekly adjustment stays the same
-
 def calculate_weekly_adjustment(balance):
     if balance < 0:
         if balance == -1:
@@ -56,15 +56,24 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
         missed_walks = max(0, expected_walks - friend_walks[i])
         extra_walks = max(0, friend_walks[i] - expected_walks)
         penalty = (missed_walks ** 2) * 0.25
-        bonus = (extra_walks ** 1.5) * 0.5  # Non-linear boost for extra work
+        bonus = (extra_walks ** 1.5) * 0.5
 
         penalties.append(penalty)
         bonuses.append(bonus)
         total_penalties += penalty
         total_bonuses += bonus
 
-    dynamic_floor = base_weekly_pay * weeks * 0.1  # 10% of base pay per month
-    adjusted_friend_totals = [max(dynamic_floor, friend_totals[i] - penalties[i] + bonuses[i]) for i in range(num_friends)]
+    adjusted_friend_totals = [friend_totals[i] - penalties[i] + bonuses[i] for i in range(num_friends)]
+
+    # Low income proportional scaling boost for light work
+    if total_monthly_income <= 100:
+        max_walks = max(friend_walks)
+        for i in range(num_friends):
+            if friend_walks[i] > 0:
+                scale_up = (friend_walks[i] / max_walks) ** 0.8  # flatten curve a bit
+                new_value = scale_up * (sum(adjusted_friend_totals) / num_friends)
+                boss_base_pay -= max(0, new_value - adjusted_friend_totals[i])
+                adjusted_friend_totals[i] = new_value
 
     total_raw_payout = sum(adjusted_friend_totals) + boss_base_pay + total_penalties - total_bonuses
 
