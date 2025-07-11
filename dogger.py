@@ -64,14 +64,14 @@ def monthly_payout(total_monthly_income, weekly_balances, num_friends):
 
     adjusted_friend_totals = [min(friend_totals[i] - penalties[i] + bonuses[i], max_monthly_friend_pay) for i in range(num_friends)]
 
-    # Increased low income proportional scaling boost
+    # More proportional low income boost
     if total_monthly_income <= 100:
         max_walks = max(friend_walks)
         if max_walks > 0:
             for i in range(num_friends):
                 if friend_walks[i] > 0:
-                    scale_up = (friend_walks[i] / max_walks) ** 0.7  # stronger scaling
-                    boost_ratio = 0.25  # increased boost at low income
+                    scale_up = (friend_walks[i] / max_walks) ** 0.5  # less flattening, more proportional
+                    boost_ratio = 0.4  # stronger boost at low income
                     new_value = adjusted_friend_totals[i] + boost_ratio * (scale_up * total_monthly_income / num_friends)
                     boss_base_pay -= max(0, new_value - adjusted_friend_totals[i])
                     adjusted_friend_totals[i] = min(new_value, max_monthly_friend_pay)
